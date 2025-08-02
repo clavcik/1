@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Карта персонажей</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 1200px;
+      height: 800px;
+      overflow: hidden;
+      background-color: #222;
+      font-family: sans-serif;
+    }
+
+    #container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #map-container {
+      position: relative;
+      width: 1152px;
+      height: 768px;
+      background: url("map.jpg") no-repeat center/cover;
+      border: 2px solid #444;
+      margin-top: 10px;
+      user-select: none;
+    }
+
+    .character {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      cursor: grab;
+      transition: transform 0.1s, left 0.2s, top 0.2s;
+    }
+
+    .character:active {
+      cursor: grabbing;
+      transform: scale(1.1);
+    }
+
+    #name-display {
+      margin-top: 4px;
+      color: #fff;
+      font-size: 16px;
+      min-height: 24px;
+      background: #333;
+      padding: 4px 12px;
+      border-radius: 8px;
+    }
+
+    #lock-btn {
+      margin-top: 6px;
+      background: #444;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    #lock-btn:hover {
+      background: #666;
+    }
+  </style>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+</head>
+<body>
+  <div id="container">
+    <div id="map-container">
+      <img src="percy/silas.png" class="character" data-name="Сайлас МакГроу" style="top:550px; left:550px;">
+      <img src="percy/clement.png" class="character" data-name="Клемент Гаскойн" style="top:120px; left:200px;">
+      <img src="percy/lawrence.png" class="character" data-name="Лоренс Сандерсон Третий" style="top:200px; left:350px;">
+      <img src="percy/blackeye.png" class="character" data-name="Чёрный Глаз" style="top:280px; left:500px;">
+      <img src="percy/marta.png" class="character" data-name="Марта" style="top:760px; left:350px;">
+      <img src="percy/desmon.png" class="character" data-name="Дезмон Скиврлc" style="top:440px; left:300px;">
+      <img src="percy/kanani.png" class="character" data-name="Канани" style="top:520px; left:450px;">
+      <img src="percy/Clementina.png" class="character" data-name="Клементина Эклесиа" style="top:600px; left:600px;">
+      <img src="percy/Reyna.png" class="character" data-name="Рейна" style="top:100px; left:700px;">
+      <img src="percy/Arthur.png" class="character" data-name="Артур Морган" style="top:220px; left:850px;">
+      <img src="percy/Faust.png" class="character" data-name="Фауст Карелла" style="top:340px; left:950px;">
+    </div>
+
+    <div id="name-display"></div>
+    <button id="lock-btn">🔒 Разблокировать</button>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOO7U0Usi6o93wJDBE8ooDvs_Kw-5825o",
+      authDomain: "my-map-project-19aca.firebaseapp.com",
+      databaseURL: "https://my-map-project-19aca-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "my-map-project-19aca",
+      storageBucket: "my-map-project-19aca.appspot.com",
+      messagingSenderId: "55009805586",
+      appId: "1:55009805586:web:f4515be484191f23979fcb"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const map = document.getElementById("map-container");
+    const lockBtn = document.getElementById("lock-btn");
+    const nameDisplay = document.getElementById("name-display");
+    let locked = true;
+    let isDragging = false;
+    let dragged = null, offsetX = 0, offsetY = 0;
+
+    const sanitizeKey = (src) => src.replace(/[.#$/\[\]]/g, "_");
+
+    const savePositions = () => {
+      const positions = {};
+      document.querySelectorAll(".character").forEach(char => {
+        const key = sanitizeKey(char.getAttribute("src"));
+        positions[key] = {
+          left: char.style.left,
+          top: char.style.top
+        };
+      });
+      db.ref("positions").set(positions);
+    };
+
+    const loadPositions = () => {
+      db.ref("positions").once("value").then(snapshot => {
+        const saved = snapshot.val();
+        if (saved) {
+          document.querySelectorAll(".character").forEach(char => {
+            const key = sanitizeKey(char.getAttribute("src"));
+            if (saved[key]) {
+              char.style.left = saved[key].left;
+              char.style.top = saved[key].top;
+            }
+          });
+        }
+      });
+    };
+
+    loadPositions();
+
+    document.querySelectorAll(".character").forEach(char => {
+      char.addEventListener("mousedown", e => {
+        if (locked) return;
+        isDragging = true;
+        dragged = char;
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+      });
+
+      char.addEventListener("mouseover", () => {
+        nameDisplay.textContent = char.dataset.name;
+      });
+
+      char.addEventListener("mouseout", () => {
+        nameDisplay.textContent = "";
+      });
+    });
+
+    document.addEventListener("mousemove", e => {
+      if (!isDragging || !dragged || locked) return;
+
+      const mapRect = map.getBoundingClientRect();
+      let x = e.clientX - mapRect.left - offsetX;
+      let y = e.clientY - mapRect.top - offsetY;
+
+      x = Math.max(0, Math.min(map.offsetWidth - dragged.offsetWidth, x));
+      y = Math.max(0, Math.min(map.offsetHeight - dragged.offsetHeight, y));
+
+      dragged.style.left = x + "px";
+      dragged.style.top = y + "px";
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (isDragging && dragged) {
+        savePositions();
+        isDragging = false;
+        dragged = null;
+      }
+    });
+
+    lockBtn.addEventListener("click", () => {
+      if (locked) {
+        const pass = prompt("Введите пароль для редактирования:");
+        if (pass === "1234") {
+          locked = false;
+          lockBtn.textContent = "🔓 Закрепить";
+        } else {
+          alert("Неверный пароль");
+        }
+      } else {
+        locked = true;
+        lockBtn.textContent = "🔒 Разблокировать";
+      }
+    });
+  </script>
+</body>
+</html>
